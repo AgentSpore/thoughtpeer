@@ -6,9 +6,10 @@ from ..repositories import peer_repo
 from ..schemas.peer import PeerShareRequest
 
 
-async def share_to_pool(db: aiosqlite.Connection, data: PeerShareRequest) -> dict:
+async def share_to_pool(db: aiosqlite.Connection, user_id: int, data: PeerShareRequest) -> dict:
     return await peer_repo.add_to_pool(
         db,
+        user_id=user_id,
         category=data.category,
         tags=data.tags,
         keywords=data.keywords,
