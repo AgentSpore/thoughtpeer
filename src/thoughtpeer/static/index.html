@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThoughtPeer — AI Journal</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+:root {
+  --bg: #0f0f13; --surface: #1a1a24; --surface2: #22223a;
+  --border: #2d2d44; --text: #e4e4ef; --text2: #8888a8;
+  --accent: #6c5ce7; --accent2: #a29bfe; --green: #00cec9;
+  --red: #fd79a8; --yellow: #fdcb6e; --radius: 12px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+.app { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+header h1 { font-size: 1.6rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stats-badge { font-size: 0.8rem; color: var(--text2); background: var(--surface); padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--surface); border-radius: var(--radius); padding: 4px; }
+.tab { flex: 1; text-align: center; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; color: var(--text2); transition: all 0.2s; border: none; background: none; }
+.tab.active { background: var(--accent); color: #fff; }
+.tab:hover:not(.active) { color: var(--text); }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* Entry form */
+.entry-form { background: var(--surface); border-radius: var(--radius); padding: 20px; margin-bottom: 24px; border: 1px solid var(--border); }
+.entry-form textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; color: var(--text); font-size: 0.95rem; resize: vertical; min-height: 120px; font-family: inherit; }
+.entry-form textarea:focus { outline: none; border-color: var(--accent); }
+.entry-form textarea::placeholder { color: var(--text2); }
+
+.form-row { display: flex; gap: 12px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+.mood-selector { display: flex; gap: 6px; }
+.mood-btn { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--border); background: var(--surface2); cursor: pointer; font-size: 1.1rem; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+.mood-btn.selected { border-color: var(--accent); transform: scale(1.15); }
+.tags-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem; }
+.tags-input:focus { outline: none; border-color: var(--accent); }
+.btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.2s; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-secondary { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+.btn-sm { padding: 6px 12px; font-size: 0.75rem; }
+
+/* Entry list */
+.entry-card { background: var(--surface); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; border: 1px solid var(--border); transition: border-color 0.2s; }
+.entry-card:hover { border-color: var(--accent); }
+.entry-meta { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 0.8rem; color: var(--text2); }
+.entry-text { font-size: 0.92rem; line-height: 1.6; margin-bottom: 10px; }
+.entry-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { background: var(--surface2); color: var(--accent2); padding: 3px 10px; border-radius: 12px; font-size: 0.7rem; }
+.tag.resolved { background: rgba(0,206,201,0.15); color: var(--green); }
+.entry-actions { display: flex; gap: 8px; margin-top: 10px; }
+.insight-box { background: var(--surface2); border-radius: 8px; padding: 12px; margin-top: 10px; font-size: 0.82rem; border-left: 3px solid var(--accent); }
+.insight-box .label { color: var(--accent2); font-weight: 600; margin-bottom: 4px; }
+
+/* Peers */
+.peer-card { background: var(--surface); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; border: 1px solid var(--border); }
+.peer-card .sim { color: var(--green); font-size: 0.8rem; font-weight: 600; }
+.peer-card .resolution { background: rgba(0,206,201,0.1); border-radius: 8px; padding: 10px; margin-top: 8px; font-size: 0.85rem; color: var(--green); }
+.search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+.search-box input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 0.9rem; }
+.search-box input:focus { outline: none; border-color: var(--accent); }
+
+/* Dashboard */
+.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }
+.stat-card { background: var(--surface); border-radius: var(--radius); padding: 18px; border: 1px solid var(--border); text-align: center; }
+.stat-card .num { font-size: 2rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-card .label { font-size: 0.75rem; color: var(--text2); margin-top: 4px; }
+.chart-container { background: var(--surface); border-radius: var(--radius); padding: 20px; border: 1px solid var(--border); margin-bottom: 20px; }
+.chart-container h3 { font-size: 0.9rem; margin-bottom: 14px; color: var(--text2); }
+
+.empty { text-align: center; padding: 48px 20px; color: var(--text2); }
+.empty .icon { font-size: 3rem; margin-bottom: 12px; }
+
+/* Resolve modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: var(--surface); border-radius: var(--radius); padding: 24px; width: 90%; max-width: 500px; border: 1px solid var(--border); }
+.modal h3 { margin-bottom: 14px; }
+.modal textarea { width: 100%; min-height: 100px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; color: var(--text); font-family: inherit; margin-bottom: 14px; resize: vertical; }
+.modal textarea:focus { outline: none; border-color: var(--accent); }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>ThoughtPeer</h1>
+    <span class="stats-badge" id="headerStats">loading...</span>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="journal">Journal</button>
+    <button class="tab" data-tab="peers">Peers</button>
+    <button class="tab" data-tab="dashboard">Dashboard</button>
+  </div>
+
+  <!-- Journal -->
+  <div class="panel active" id="journal">
+    <div class="entry-form">
+      <textarea id="entryText" placeholder="What's on your mind? Write about your day, challenges, thoughts..."></textarea>
+      <div class="form-row">
+        <div class="mood-selector">
+          <button class="mood-btn" data-mood="great" title="Great">&#128513;</button>
+          <button class="mood-btn" data-mood="good" title="Good">&#128578;</button>
+          <button class="mood-btn selected" data-mood="neutral" title="Neutral">&#128528;</button>
+          <button class="mood-btn" data-mood="bad" title="Bad">&#128543;</button>
+          <button class="mood-btn" data-mood="terrible" title="Terrible">&#128557;</button>
+        </div>
+        <input class="tags-input" id="entryTags" placeholder="Tags (comma separated)">
+        <button class="btn btn-primary" onclick="createEntry()">Save</button>
+      </div>
+    </div>
+    <div id="entryList"></div>
+  </div>
+
+  <!-- Peers -->
+  <div class="panel" id="peers">
+    <div class="search-box">
+      <input id="peerSearch" placeholder="Describe your problem or enter keywords...">
+      <button class="btn btn-primary" onclick="searchPeers()">Find Similar</button>
+      <button class="btn btn-secondary" onclick="searchSolutions()">Solutions</button>
+    </div>
+    <div id="peerResults"></div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="panel" id="dashboard">
+    <div class="dashboard-grid" id="dashStats"></div>
+    <div class="chart-container">
+      <h3>Mood Timeline</h3>
+      <canvas id="moodChart" height="200"></canvas>
+    </div>
+    <div id="topProblems"></div>
+  </div>
+</div>
+
+<!-- Resolve Modal -->
+<div class="modal-overlay" id="resolveModal">
+  <div class="modal">
+    <h3>Mark as Resolved</h3>
+    <textarea id="resolutionText" placeholder="What helped you? Describe your solution..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeResolve()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitResolve()">Resolve</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let selectedMood = 'neutral';
+let resolveEntryId = null;
+let moodChart = null;
+
+// Tabs
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById(t.dataset.tab).classList.add('active');
+    if (t.dataset.tab === 'dashboard') loadDashboard();
+  });
+});
+
+// Mood selector
+document.querySelectorAll('.mood-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.mood-btn').forEach(x => x.classList.remove('selected'));
+    b.classList.add('selected');
+    selectedMood = b.dataset.mood;
+  });
+});
+
+// CRUD
+async function createEntry() {
+  const text = document.getElementById('entryText').value.trim();
+  if (!text) return;
+  const tags = document.getElementById('entryTags').value.split(',').map(t => t.trim()).filter(Boolean);
+  const res = await fetch(`${API}/entries`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ text, mood: selectedMood, tags })
+  });
+  if (res.ok) {
+    const entry = await res.json();
+    document.getElementById('entryText').value = '';
+    document.getElementById('entryTags').value = '';
+    // Auto-analyze via server fallback
+    await fetch(`${API}/entries/${entry.id}/analyze`, { method: 'POST' });
+    loadEntries();
+  }
+}
+
+async function loadEntries() {
+  const res = await fetch(`${API}/entries`);
+  const entries = await res.json();
+  const el = document.getElementById('entryList');
+  if (!entries.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">&#128221;</div>No entries yet. Start writing!</div>';
+    return;
+  }
+  const moods = {great:'&#128513;',good:'&#128578;',neutral:'&#128528;',bad:'&#128543;',terrible:'&#128557;'};
+  let html = '';
+  for (const e of entries) {
+    const insight = await fetch(`${API}/insights/${e.id}`).then(r => r.ok ? r.json() : null);
+    html += `<div class="entry-card">
+      <div class="entry-meta">
+        <span>${moods[e.mood]||''}</span>
+        <span>${new Date(e.created_at).toLocaleDateString('en', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+        ${e.is_resolved ? '<span class="tag resolved">Resolved</span>' : ''}
+      </div>
+      <div class="entry-text">${esc(e.text)}</div>
+      <div class="entry-tags">${e.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+      ${insight ? `<div class="insight-box">
+        <div class="label">AI Insight</div>
+        ${insight.category ? `<div>Category: <strong>${esc(insight.category)}</strong> | Severity: ${insight.severity}/10</div>` : ''}
+        ${insight.emotions?.length ? `<div>Emotions: ${insight.emotions.join(', ')}</div>` : ''}
+        ${insight.problems?.length ? `<div>Issues: ${insight.problems.map(p=>esc(p)).join('; ')}</div>` : ''}
+      </div>` : ''}
+      <div class="entry-actions">
+        ${!e.is_resolved ? `<button class="btn btn-secondary btn-sm" onclick="openResolve(${e.id})">Resolve</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="shareEntry(${e.id})">Share Anonymously</button>
+        <button class="btn btn-secondary btn-sm" onclick="deleteEntry(${e.id})">Delete</button>
+      </div>
+      ${e.is_resolved && e.resolution_text ? `<div class="insight-box" style="border-color:var(--green);margin-top:8px"><div class="label" style="color:var(--green)">Resolution</div>${esc(e.resolution_text)}</div>` : ''}
+    </div>`;
+  }
+  el.innerHTML = html;
+  updateHeaderStats(entries.length);
+}
+
+async function deleteEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  await fetch(`${API}/entries/${id}`, { method: 'DELETE' });
+  loadEntries();
+}
+
+function openResolve(id) { resolveEntryId = id; document.getElementById('resolveModal').classList.add('show'); }
+function closeResolve() { resolveEntryId = null; document.getElementById('resolveModal').classList.remove('show'); }
+async function submitResolve() {
+  const text = document.getElementById('resolutionText').value.trim();
+  if (!text || !resolveEntryId) return;
+  await fetch(`${API}/entries/${resolveEntryId}/resolve`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ resolution_text: text })
+  });
+  document.getElementById('resolutionText').value = '';
+  closeResolve();
+  loadEntries();
+}
+
+async function shareEntry(id) {
+  const insight = await fetch(`${API}/insights/${id}`).then(r => r.ok ? r.json() : null);
+  const entry = await fetch(`${API}/entries/${id}`).then(r => r.json());
+  if (!insight) { alert('Analyze entry first'); return; }
+  await fetch(`${API}/peers/share`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      category: insight.category || 'general',
+      tags: entry.tags,
+      keywords: insight.keywords,
+      severity: insight.severity,
+      mood: entry.mood,
+      is_resolved: entry.is_resolved,
+      resolution_text: entry.resolution_text
+    })
+  });
+  alert('Shared anonymously to peer pool!');
+}
+
+// Peers
+async function searchPeers() {
+  const text = document.getElementById('peerSearch').value.trim();
+  if (!text) return;
+  const res = await fetch(`${API}/peers/similar`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ text, limit: 15 })
+  });
+  const peers = await res.json();
+  renderPeers(peers, false);
+}
+
+async function searchSolutions() {
+  const text = document.getElementById('peerSearch').value.trim();
+  if (!text) return;
+  const res = await fetch(`${API}/peers/solutions`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ text, limit: 15 })
+  });
+  const solutions = await res.json();
+  renderPeers(solutions, true);
+}
+
+function renderPeers(items, solutionsOnly) {
+  const el = document.getElementById('peerResults');
+  if (!items.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">&#128269;</div>No matches found. Try different keywords.</div>';
+    return;
+  }
+  el.innerHTML = items.map(p => `<div class="peer-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="tag">${esc(p.category)}</span>
+      <span class="sim">${Math.round(p.similarity*100)}% match</span>
+    </div>
+    <div class="entry-tags">${(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}${(p.keywords||[]).map(k=>`<span class="tag">${esc(k)}</span>`).join('')}</div>
+    ${p.severity ? `<div style="font-size:0.8rem;color:var(--text2);margin-top:6px">Severity: ${p.severity}/10</div>` : ''}
+    ${p.resolution_text ? `<div class="resolution">${esc(p.resolution_text)}</div>` : ''}
+  </div>`).join('');
+}
+
+// Dashboard
+async function loadDashboard() {
+  const res = await fetch(`${API}/analytics/overview`);
+  const data = await res.json();
+  document.getElementById('dashStats').innerHTML = `
+    <div class="stat-card"><div class="num">${data.total_entries}</div><div class="label">Entries</div></div>
+    <div class="stat-card"><div class="num">${data.resolved_entries}</div><div class="label">Resolved</div></div>
+    <div class="stat-card"><div class="num">${data.peer_pool_size}</div><div class="label">Peer Pool</div></div>
+    <div class="stat-card"><div class="num">${data.peer_solutions}</div><div class="label">Solutions</div></div>
+  `;
+  document.getElementById('topProblems').innerHTML = data.top_problems?.length
+    ? `<div class="chart-container"><h3>Top Problems</h3>${data.top_problems.map(p=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>${esc(p.name)}</span><span style="color:var(--accent2)">${p.count}</span></div>`).join('')}</div>` : '';
+
+  // Mood chart
+  const timeline = await fetch(`${API}/insights/timeline/mood`).then(r=>r.json());
+  if (timeline.length && document.getElementById('moodChart')) {
+    const moodMap = {great:5,good:4,neutral:3,bad:2,terrible:1};
+    const labels = timeline.map(t=>t.d||t.date);
+    const values = timeline.map(t=>moodMap[t.mood]||3);
+    if (moodChart) moodChart.destroy();
+    moodChart = new Chart(document.getElementById('moodChart'), {
+      type:'line',
+      data:{labels, datasets:[{label:'Mood',data:values,borderColor:'#6c5ce7',backgroundColor:'rgba(108,92,231,0.1)',fill:true,tension:0.4}]},
+      options:{responsive:true,scales:{y:{min:1,max:5,ticks:{callback:v=>(['','Terrible','Bad','Neutral','Good','Great'][v])}}},plugins:{legend:{display:false}}}
+    });
+  }
+}
+
+function updateHeaderStats(count) {
+  document.getElementById('headerStats').textContent = `${count} entries`;
+}
+function esc(s) { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+// Init
+loadEntries();
+</script>
+</body>
+</html>
