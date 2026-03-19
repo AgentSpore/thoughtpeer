@@ -7,66 +7,37 @@ import aiosqlite
 
 
 async def upsert_insight(
-    db: aiosqlite.Connection,
-    *,
-    entry_id: int,
-    problems: list[str],
-    emotions: list[str],
-    category: str | None,
-    severity: int,
-    keywords: list[str],
+    db: aiosqlite.Connection, *, entry_id: int,
+    problems: list[str], emotions: list[str], category: str | None,
+    severity: int, keywords: list[str],
+    summary: str = "", advice: str = "",
 ) -> dict:
     now = datetime.utcnow().isoformat()
     await db.execute(
-        """INSERT INTO insights (entry_id, problems, emotions, category, severity, keywords, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+        """INSERT INTO insights (entry_id, problems, emotions, category, severity, keywords, summary, advice, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(entry_id) DO UPDATE SET
-             problems=excluded.problems,
-             emotions=excluded.emotions,
-             category=excluded.category,
-             severity=excluded.severity,
-             keywords=excluded.keywords,
-             created_at=excluded.created_at""",
-        (
-            entry_id,
-            json.dumps(problems),
-            json.dumps(emotions),
-            category,
-            severity,
-            json.dumps(keywords),
-            now,
-        ),
+             problems=excluded.problems, emotions=excluded.emotions,
+             category=excluded.category, severity=excluded.severity,
+             keywords=excluded.keywords, summary=excluded.summary,
+             advice=excluded.advice, created_at=excluded.created_at""",
+        (entry_id, json.dumps(problems), json.dumps(emotions), category,
+         severity, json.dumps(keywords), summary, advice, now),
     )
     await db.commit()
     return await get_insight_by_entry(db, entry_id)
 
 
-async def get_insight_by_entry(
-    db: aiosqlite.Connection, entry_id: int
-) -> dict | None:
-    cursor = await db.execute(
-        "SELECT * FROM insights WHERE entry_id = ?", (entry_id,)
-    )
+async def get_insight_by_entry(db: aiosqlite.Connection, entry_id: int) -> dict | None:
+    cursor = await db.execute("SELECT * FROM insights WHERE entry_id = ?", (entry_id,))
     row = await cursor.fetchone()
-    if not row:
-        return None
-    return _row_to_dict(row)
+    return _row_to_dict(row) if row else None
 
 
-async def get_all_insights(db: aiosqlite.Connection) -> list[dict]:
-    cursor = await db.execute("SELECT * FROM insights ORDER BY created_at DESC")
-    rows = await cursor.fetchall()
-    return [_row_to_dict(r) for r in rows]
-
-
-async def get_aggregated_patterns(
-    db: aiosqlite.Connection, user_id: str = "local"
-) -> dict:
+async def get_aggregated_patterns(db: aiosqlite.Connection, user_id: int = 0) -> dict:
     cursor = await db.execute(
-        """SELECT i.* FROM insights i
-           JOIN entries e ON i.entry_id = e.id
-           WHERE e.user_id = ?
-           ORDER BY i.created_at DESC""",
+        """SELECT i.* FROM insights i JOIN entries e ON i.entry_id = e.id
+           WHERE e.user_id = ? ORDER BY i.created_at DESC""",
         (user_id,),
     )
     rows = await cursor.fetchall()
@@ -75,7 +46,6 @@ async def get_aggregated_patterns(
     problems: dict[str, int] = {}
     emotions: dict[str, int] = {}
     categories: dict[str, int] = {}
-
     for ins in insights:
         for p in ins["problems"]:
             problems[p] = problems.get(p, 0) + 1
@@ -87,18 +57,15 @@ async def get_aggregated_patterns(
     def top(d: dict, n: int = 10) -> list[dict]:
         return [{"name": k, "count": v} for k, v in sorted(d.items(), key=lambda x: -x[1])[:n]]
 
-    # Mood trend
     mood_cursor = await db.execute(
         """SELECT date(created_at) as d, mood, COUNT(*) as cnt
-           FROM entries WHERE user_id = ?
-           GROUP BY d, mood ORDER BY d""",
+           FROM entries WHERE user_id = ? GROUP BY d, mood ORDER BY d""",
         (user_id,),
     )
     mood_rows = await mood_cursor.fetchall()
 
     resolved_cursor = await db.execute(
-        "SELECT COUNT(*) FROM entries WHERE user_id = ? AND is_resolved = 1",
-        (user_id,),
+        "SELECT COUNT(*) FROM entries WHERE user_id = ? AND is_resolved = 1", (user_id,),
     )
     resolved = (await resolved_cursor.fetchone())[0]
 

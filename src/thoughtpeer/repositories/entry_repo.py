@@ -9,7 +9,7 @@ import aiosqlite
 async def create_entry(
     db: aiosqlite.Connection,
     *,
-    user_id: str,
+    user_id: int,
     text: str,
     mood: str,
     tags: list[str],
@@ -35,7 +35,7 @@ async def get_entry(db: aiosqlite.Connection, entry_id: int) -> dict | None:
 async def list_entries(
     db: aiosqlite.Connection,
     *,
-    user_id: str = "local",
+    user_id: int = 0,
     mood: str | None = None,
     tag: str | None = None,
     date_from: str | None = None,
@@ -117,7 +117,7 @@ async def delete_entry(db: aiosqlite.Connection, entry_id: int) -> bool:
     return cursor.rowcount > 0
 
 
-async def count_entries(db: aiosqlite.Connection, user_id: str = "local") -> int:
+async def count_entries(db: aiosqlite.Connection, user_id: int = 0) -> int:
     cursor = await db.execute(
         "SELECT COUNT(*) FROM entries WHERE user_id = ?", (user_id,)
     )

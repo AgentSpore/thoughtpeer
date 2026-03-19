@@ -32,7 +32,7 @@ class EntryResolve(BaseModel):
 
 class EntryResponse(BaseModel):
     id: int
-    user_id: str
+    user_id: int
     text: str
     mood: str
     tags: list[str]
