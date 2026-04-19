@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 
 from ..core.deps import DbDep, UserDep
 from ..repositories import insight_repo
@@ -35,6 +35,24 @@ async def list_entries(
     )
 
 
+@router.get("/export")
+async def export_entries(db: DbDep, user: UserDep):
+    """Export all entries as signed JSON (for integrity check on import)."""
+    return await entry_service.export_all(db, user["id"])
+
+
+@router.post("/import")
+async def import_entries(db: DbDep, user: UserDep, file: UploadFile = File(...)):
+    """Import a previously exported JSON dump. Dedupes by original_id."""
+    if file.size is not None and file.size > 10 * 1024 * 1024:
+        raise HTTPException(413, "File too large (max 10MB)")
+    raw = await file.read()
+    try:
+        return await entry_service.import_dump(db, user["id"], raw)
+    except ValueError:
+        raise HTTPException(400, "Invalid import file")
+
+
 @router.get("/{entry_id}", response_model=EntryResponse)
 async def get_entry(entry_id: int, db: DbDep, user: UserDep):
     return await entry_service.get(db, entry_id, user["id"])
@@ -52,7 +70,10 @@ async def delete_entry(entry_id: int, db: DbDep, user: UserDep):
 
 @router.post("/{entry_id}/resolve", response_model=EntryResponse)
 async def resolve_entry(entry_id: int, data: EntryResolve, db: DbDep, user: UserDep):
-    return await entry_service.resolve(db, entry_id, user["id"], data.resolution_text)
+    return await entry_service.resolve(
+        db, entry_id, user["id"], data.resolution_text,
+        share_to_pool=data.share_to_pool,
+    )
 
 
 @router.post("/{entry_id}/analyze")

@@ -28,6 +28,7 @@ class EntryUpdate(BaseModel):
 
 class EntryResolve(BaseModel):
     resolution_text: str = Field(..., min_length=1, max_length=5000)
+    share_to_pool: bool = False
 
 
 class EntryResponse(BaseModel):

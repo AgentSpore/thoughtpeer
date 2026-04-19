@@ -524,8 +524,17 @@ body::after {
       <div class="page-title">Dashboard</div>
       <div class="page-sub">Your journey, at a glance.</div>
       <div class="dash-grid" id="dashStats"></div>
-      <div class="chart-wrap"><h3>Mood over time</h3><canvas id="moodChart" height="220"></canvas></div>
+      <div class="chart-wrap"><h3 style="display:flex;align-items:center;gap:10px">Mood over time <span id="trendBadge"></span></h3><canvas id="moodChart" height="220"></canvas></div>
       <div id="dashDetails"></div>
+      <div class="list-card" style="margin-top:20px"><h3>Settings &mdash; Journal backup</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn" onclick="exportJournal()">Export journal</button>
+          <label class="btn" style="cursor:pointer">Import journal
+            <input type="file" accept="application/json" style="display:none" onchange="importJournal(this)">
+          </label>
+        </div>
+        <p style="color:#b0a593;font-size:13px;margin-top:8px">Your data is yours. Export a signed JSON snapshot; reimport anywhere.</p>
+      </div>
     </div>
   </div>
 </div>
@@ -741,14 +750,18 @@ async function searchPeers() {
     el.innerHTML = `<div class="empty"><div class="big">&#127807;</div><h3>No matches yet</h3><p>Try different words, or share your experience to help grow this community.</p></div>`;
     return;
   }
-  el.innerHTML = items.map(p=>{
-    const sim = Math.round(p.similarity*100);
+  // Cap at 5 to avoid overwhelm (backend also caps).
+  el.innerHTML = items.slice(0,5).map(p=>{
+    const score = p.similarity_score ?? p.similarity ?? 0;
+    const sim = Math.round(score*100);
     const cls = sim>=60?'high':sim>=30?'med':'low';
+    const anon = (p.anon_hash||'').slice(0,4) || Math.random().toString(16).slice(2,6);
     return `<div class="peer">
       <div class="peer-top">
-        <div class="entry-tags"><span class="tag">${esc(p.category)}</span>${(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+        <div class="entry-tags"><span class="tag">peer #${anon}</span><span class="tag">${esc(p.category)}</span>${(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
         <span class="match-badge ${cls}">${sim}% match</span>
       </div>
+      <div class="sim-bar" style="height:6px;background:rgba(180,170,155,0.2);border-radius:3px;margin:6px 0;overflow:hidden"><div style="height:100%;width:${sim}%;background:linear-gradient(90deg,#7a9a7e,#c4a57b)"></div></div>
       <div class="peer-kw">${(p.keywords||[]).slice(0,6).map(k=>`<span>${esc(k)}</span>`).join('')}</div>
       ${p.resolution_text?`<div class="peer-solution">${esc(p.resolution_text)}</div>`:''}
     </div>`;
@@ -775,30 +788,58 @@ async function loadDashboard() {
   }
   document.getElementById('dashDetails').innerHTML = details;
 
-  const moodMap = {great:5,good:4,neutral:3,bad:2,terrible:1};
-  const trend = d.mood_trend||[];
-  if (trend.length) {
-    const labels = trend.map(t=>t.d);
-    const values = trend.map(t=>moodMap[t.mood]||3);
-    if (moodChart) moodChart.destroy();
-    moodChart = new Chart(document.getElementById('moodChart'), {
-      type:'line',
-      data:{labels,datasets:[{
-        label:'Mood',data:values,
-        borderColor:'#7a9a7e',backgroundColor:'rgba(122,154,126,0.06)',
-        fill:true,tension:0.45,pointBackgroundColor:'#7a9a7e',pointRadius:5,
-        pointHoverRadius:8,borderWidth:2.5,pointBorderColor:'#fff',pointBorderWidth:2,
-      }]},
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        scales:{
-          y:{min:0.5,max:5.5,ticks:{callback:v=>['','Rough','Low','Okay','Good','Great'][v]||'',color:'#b0a593',font:{family:'DM Sans'}},grid:{color:'rgba(180,170,155,0.1)'},border:{display:false}},
-          x:{ticks:{color:'#b0a593',font:{family:'DM Sans'}},grid:{display:false},border:{display:false}}
-        },
-        plugins:{legend:{display:false}}
-      }
-    });
-  }
+  // Mood timeline with trend badge + 7-day moving average (v0.3).
+  try {
+    const tr = await fetch(`${API}/insights/timeline`, {headers:headers()});
+    if (tr.ok) {
+      const tl = await tr.json();
+      const trendColor = {improving:'#7a9a7e', stable:'#b0a593', declining:'#c67a6a'}[tl.mood_trend] || '#b0a593';
+      const trendIcon = {improving:'\u2197', stable:'\u2194', declining:'\u2198'}[tl.mood_trend] || '';
+      const badge = document.getElementById('trendBadge');
+      if (badge) badge.innerHTML = `<span style="display:inline-block;padding:4px 10px;border-radius:12px;background:${trendColor}22;color:${trendColor};font-weight:600;font-size:13px">${trendIcon} ${tl.mood_trend||'stable'} (${tl.sample_size||0} days)</span>`;
+      const labels = tl.points.map(p=>p.date);
+      const values = tl.points.map(p=>p.score);
+      const mavg = tl.points.map(p=>p.moving_avg);
+      if (moodChart) moodChart.destroy();
+      moodChart = new Chart(document.getElementById('moodChart'), {
+        type:'line',
+        data:{labels,datasets:[
+          {label:'Mood',data:values,borderColor:'#7a9a7e',backgroundColor:'rgba(122,154,126,0.06)',fill:true,tension:0.45,pointBackgroundColor:'#7a9a7e',pointRadius:5,pointHoverRadius:8,borderWidth:2.5,pointBorderColor:'#fff',pointBorderWidth:2},
+          {label:'7-day avg',data:mavg,borderColor:'#c4a57b',borderDash:[6,4],fill:false,tension:0.2,pointRadius:0,borderWidth:2}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          scales:{y:{min:0.5,max:5.5,ticks:{callback:v=>['','Rough','Low','Okay','Good','Great'][v]||'',color:'#b0a593',font:{family:'DM Sans'}},grid:{color:'rgba(180,170,155,0.1)'},border:{display:false}},
+                  x:{ticks:{color:'#b0a593',font:{family:'DM Sans'}},grid:{display:false},border:{display:false}}},
+          plugins:{legend:{display:true,labels:{color:'#b0a593'}}}}
+      });
+    }
+  } catch(e) { /* silent */ }
+}
+
+// Export/Import (v0.3 settings panel)
+async function exportJournal() {
+  const r = await fetch(`${API}/entries/export`, {headers:headers()});
+  if (!r.ok) { toast('Export failed'); return; }
+  const data = await r.json();
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `thoughtpeer-journal-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  toast('Export saved.');
+}
+
+async function importJournal(fileInput) {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const h = headers(); delete h['Content-Type'];
+  const r = await fetch(`${API}/entries/import`, {method:'POST', headers:h, body:fd});
+  if (!r.ok) { toast('Import failed'); return; }
+  const res = await r.json();
+  toast(`Imported ${res.imported}, skipped ${res.skipped}${res.integrity_verified?' (verified)':''}.`);
+  loadEntries && loadEntries();
 }
 
 function esc(s) { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }

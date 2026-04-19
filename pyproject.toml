@@ -1,6 +1,6 @@
 [project]
 name = "thoughtpeer"
-version = "0.2.0"
+version = "0.3.0"
 description = "AI-powered journal with LLM analysis and anonymous peer matching"
 requires-python = ">=3.11"
 dependencies = [
@@ -11,7 +11,11 @@ dependencies = [
     "pydantic-settings>=2.6.0",
     "pyjwt>=2.9.0",
     "httpx>=0.28.0",
+    "python-multipart>=0.0.20",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24.0"]

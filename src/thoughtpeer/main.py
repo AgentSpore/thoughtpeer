@@ -24,7 +24,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         description="AI-powered journal with LLM analysis and anonymous peer matching",
-        version="0.2.0",
+        version="0.3.0-peer-focus",
         lifespan=lifespan,
     )
 

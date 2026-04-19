@@ -18,6 +18,7 @@ class PeerShareRequest(BaseModel):
 
 class PeerMatch(BaseModel):
     id: int
+    anon_hash: str | None = None
     category: str
     tags: list[str]
     keywords: list[str]
@@ -26,16 +27,30 @@ class PeerMatch(BaseModel):
     is_resolved: bool
     resolution_text: str | None
     similarity: float
+    similarity_score: float = Field(0.0, ge=0.0, le=1.0)
     created_at: datetime
 
 
 class PeerSolution(BaseModel):
     id: int
+    anon_hash: str | None = None
     category: str
     tags: list[str]
     resolution_text: str
     severity: int
     similarity: float
+    similarity_score: float = Field(0.0, ge=0.0, le=1.0)
+    created_at: datetime
+
+
+class PeerResolvedSimilar(BaseModel):
+    """A resolved peer whose pattern matches the given entry."""
+    anon_hash: str
+    category: str
+    tags: list[str]
+    similarity_score: float = Field(..., ge=0.0, le=1.0)
+    resolution_text: str
+    severity: int
     created_at: datetime
 
 

@@ -97,6 +97,12 @@ async def search_solutions(
     return results[:limit]
 
 
+async def delete_peer_entry(db: aiosqlite.Connection, peer_id: int) -> bool:
+    cursor = await db.execute("DELETE FROM peer_pool WHERE id = ?", (peer_id,))
+    await db.commit()
+    return cursor.rowcount > 0
+
+
 async def pool_stats(db: aiosqlite.Connection) -> dict:
     total = await db.execute("SELECT COUNT(*) FROM peer_pool")
     resolved = await db.execute("SELECT COUNT(*) FROM peer_pool WHERE is_resolved = 1")
